@@ -1,0 +1,203 @@
+#Импортируем необходимые библиотеки для парсинга данных о фолах в чемпионате Франции
+
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from webdriver_manager.chrome import ChromeDriverManager
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.chrome.options import Options
+import time
+import pandas as pd
+import io
+from io import StringIO
+
+#загружаем датасет
+df_merged_23_24 = pd.read_excel(r'C:\Users\Maksim\Desktop\Python VSC\IDE\PROJECT FOR WORK\fouls\Italy\final_italy_fouls_23_24.xlsx')
+
+#cобираем данные с фолами
+
+chrome_options = webdriver.ChromeOptions()
+chrome_options.add_argument('--window-size=1600,1000')
+
+wait = WebDriverWait(driver, 10)
+service = Service(executable_path=ChromeDriverManager().install())
+driver = webdriver.Chrome(service=service, options=chrome_options)
+url = 'https://fbref.com/en/comps/11/Serie-A-Stats'
+driver.get(url)
+time.sleep(3)
+
+team_links = driver.find_elements(By.XPATH, '//table[@class="stats_table sortable min_width force_mobilize now_sortable"]//tbody//tr')
+all_team_data_fouls_24_25 = {}
+
+for row in team_links:
+    time.sleep(2)
+    team_link = row.find_element(By.XPATH, './/td//a')
+    team_url = team_link.get_attribute("href")
+    driver.execute_script("window.open('');")
+    driver.switch_to.window(driver.window_handles[1])
+    driver.get(f'{team_url}')
+
+    time.sleep(3)
+
+    misc_button = driver.find_element('xpath', '//*[@id="inner_nav"]/ul/li[5]/div/ul[2]/li[9]/a').get_attribute('href')
+    driver.get(f'{misc_button}')
+
+    try:
+        table = WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.XPATH, '//table[@class = "stats_table sortable min_width now_sortable"]'))
+        )
+        
+        team_data = pd.read_html(StringIO(table.get_attribute("outerHTML")))[0]
+        team_name = WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.XPATH, '//div//h1//span'))
+        ).text.replace(" ", "_")  # Заменяем пробелы на '_' для корректного имени DataFrame
+
+        all_team_data_fouls_24_25[team_name] = team_data
+    except TimeoutException:
+        print(f"Не удалось загрузить данные для {team_url}")
+
+    driver.close()
+    driver.switch_to.window(driver.window_handles[0])
+    time.sleep(2)
+    if len(all_team_data_fouls_24_25) == 20:
+        driver.quit()
+        
+data_to_proccess_fouls_24_25 = all_team_data_fouls_24_25.copy()
+
+def clean_dataframe(df):
+    df = df.droplevel(level=0, axis=1)  
+    df.columns = [col.strip() for col in df.columns.values]  
+    df = df.replace('', pd.NA)  
+    # Убираем df.fillna() - NaN останутся в DataFrame
+    return df
+
+proccessed_team_data_fouls_24_25 = {team_name: clean_dataframe(df) for team_name, df in data_to_proccess_fouls_24_25.items()}
+proccessed_team_data_fouls_24_25
+
+
+#собираем данные с фолами против
+chrome_options = webdriver.ChromeOptions()
+chrome_options.add_argument('--window-size=1600,1000')
+
+wait = WebDriverWait(driver, 10)
+service = Service(executable_path=ChromeDriverManager().install())
+driver = webdriver.Chrome(service=service, options=chrome_options)
+url = 'https://fbref.com/en/comps/11/Serie-A-Stats'
+driver.get(url)
+time.sleep(3)
+
+team_links = driver.find_elements(By.XPATH, '//table[@class="stats_table sortable min_width force_mobilize now_sortable"]//tbody//tr')
+all_team_data_fouls_24_25_against = {}
+
+for row in team_links:
+    time.sleep(2)
+    team_link = row.find_element(By.XPATH, './/td//a')
+    team_url = team_link.get_attribute("href")
+    driver.execute_script("window.open('');")
+    driver.switch_to.window(driver.window_handles[1])
+    driver.get(f'{team_url}')
+
+    time.sleep(3)
+
+    misc_button = driver.find_element('xpath', '//*[@id="inner_nav"]/ul/li[5]/div/ul[2]/li[9]/a').get_attribute('href')
+    driver.get(f'{misc_button}')
+    time.sleep(3)
+    against_button = driver.find_element('xpath', '//*[@id="all_matchlogs"]/div[3]/div[2]/a')
+    parent_button = driver.find_element('xpath', '//*[@id="content"]/div[2]')
+    driver.execute_script("arguments[0].scrollIntoView(true)", parent_button) 
+    time.sleep(1)
+    against_button.click()
+    time.sleep(3)
+
+    try:
+        table = WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.XPATH, '//table[@id="matchlogs_against"]'))
+        )
+        
+        team_data = pd.read_html(StringIO(table.get_attribute("outerHTML")))[0]
+        team_name = WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.XPATH, '//div//h1//span'))
+        ).text.replace(" ", "_")  # Заменяем пробелы на '_' для корректного имени DataFrame
+
+        all_team_data_fouls_24_25_against[team_name] = team_data
+    except TimeoutException:
+        print(f"Не удалось загрузить данные для {team_url}")
+
+    driver.close()
+    driver.switch_to.window(driver.window_handles[0])
+    time.sleep(2)
+    if len(all_team_data_fouls_24_25_against) == 20:
+        driver.quit()
+
+
+data_to_proccess_fouls_24_25_against = all_team_data_fouls_24_25_against.copy()
+
+proccessed_team_data_fouls_24_25_against = {team_name: clean_dataframe(df) for team_name, df in data_to_proccess_fouls_24_25_against.items()}
+
+
+
+
+#обрабатываем данные с фолами
+
+dfs_fouls_24_25 = []
+
+for key in proccessed_team_data_fouls_24_25.keys():
+    
+    # Получаем датафреймы из словарей
+    df1 = pd.DataFrame(proccessed_team_data_fouls_24_25[key])
+    df2 = pd.DataFrame(proccessed_team_data_fouls_24_25_against[key])
+    
+    
+    # Переименовываем столбец Sh во втором датафрейме
+    df1['Team'] = key.replace('2024-2025_', '').replace('_Match_Logs', '').replace('_', ' ')
+    # Объединяем датафреймы по столбцу Match Report
+    df = pd.merge(df1, df2, on='Date', how='left')
+    
+    
+    # Добавляем объединенный датафрейм в список
+    dfs_fouls_24_25.append(df)
+
+dfs_fouls_24_25[0].columns
+dfs_fouls_24_25 = [df[['Date', 'Venue_x','Team', 'Opponent_x', 'Fls_x', 'Fls_y']] for df in dfs_fouls_24_25]
+
+
+dfs_fouls_24_25_concated = pd.concat(dfs_fouls_24_25)
+dfs_fouls_24_25_concated = dfs_fouls_24_25_concated[dfs_fouls_24_25_concated['Venue_x'] == 'Home'][['Date', 'Team', 'Opponent_x','Fls_x', 'Fls_y']]
+dfs_fouls_24_25_concated.columns = ['Date', 'Home', 'Away', 'fouls_home', 'fouls_away']
+dfs_fouls_24_25_concated = dfs_fouls_24_25_concated.replace({'Inter': 'Internazionale'})
+dfs_fouls_24_25_concated
+
+#собираем данные с расписанием
+
+chrome_options = webdriver.ChromeOptions()
+chrome_options.add_argument('--window-size=1600,1000')
+
+wait = WebDriverWait(driver, 10)
+service = Service(executable_path=ChromeDriverManager().install())
+driver = webdriver.Chrome(service=service, options=chrome_options)
+url = 'https://fbref.com/en/comps/11/schedule/Serie-A-Scores-and-Fixtures'
+driver.get(url)
+time.sleep(3)
+
+timetable = driver.find_element('xpath', '//table[@class = "stats_table sortable min_width now_sortable"]')
+
+timetable = WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located(('xpath', '//table[@class = "stats_table sortable min_width now_sortable"]'))
+        )
+    
+timetable_df_24_25 = pd.read_html(StringIO(timetable.get_attribute("outerHTML")))[0]
+driver.quit()
+timetable_df_24_25 = timetable_df_24_25[['Date', 'Home', 'Away', 'Referee']][(timetable_df_24_25['Home'].notnull()) & (timetable_df_24_25['Home'] != 'Home')]
+timetable_df_24_25 = timetable_df_24_25.replace({'Inter': 'Internazionale'})
+timetable_df_24_25
+
+df_timetable_and_data_24_25 = timetable_df_24_25[['Date', 'Home', 'Away', 'Referee']].merge(dfs_fouls_24_25_concated, how = 'left', on = ['Date', 'Home', 'Away'])
+df_timetable_and_data_24_25
+
+
+
+#обрабатываем финальный датасет
+final_df = pd.concat([df_merged_23_24, df_timetable_and_data_24_25])
+final_df.to_excel(r'C:\Users\Maksim\Desktop\Python VSC\IDE\PROJECT FOR WORK\fouls\Italy\df_to_clear_italy.xlsx', index = False) 
+
