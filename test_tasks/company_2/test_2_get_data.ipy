@@ -1,0 +1,337 @@
+#импортируем библиотеки
+import requests
+import pandas as pd
+
+#собираем список торгуемых тикеров
+url_tickers = "https://iss.moex.com/iss/engines/stock/markets/shares/boards/TQBR/securities.json"
+response = requests.get(url_tickers)
+data = response.json()
+tickers_name = {security[0]: security[2] for security in data["securities"]["data"]}
+
+#собираем цены закрытия по бумагам
+start_date = '2023-01-03'
+end_date = '2023-05-26'
+
+data_dict = {}
+
+for ticker, name in tickers_name.items():
+    url = f'https://iss.moex.com/iss/history/engines/stock/markets/shares/boards/TQBR/securities/{ticker}.json?from={start_date}&till={end_date}'
+    response = requests.get(url)
+    response.raise_for_status()
+
+    data = response.json()
+
+    #извлекаем данные о дате и цене закрытия
+    df_data = []
+    for row in data['history']['data']:
+        if len(row) >= 12: # Проверяем наличие данных о цене закрытия
+            df_data.append({'Date': row[1], 'Close_Price': row[11]})
+
+    #создаем DataFrame и добавляем в словарь
+    data_dict[ticker] = pd.DataFrame(df_data)
+    
+
+#удаляем неполные и пустые таблицы
+filtered_dict = {key: value for key, value in data_dict.items() if not value.empty and value['Close_Price'].count() == 100}
+
+#обрабатываем данные
+new_dict = {}
+def process(df):
+    date_range = pd.date_range(start=start_date, end=end_date, freq='D')
+    dates_df = pd.DataFrame({'Date': date_range})
+    df['Date'] = pd.to_datetime(df['Date'])
+    df = dates_df.merge(df, on='Date', how='left')
+    df = df.ffill()
+    df['day'] = df['Close_Price'].diff()
+    df['week'] = df['Close_Price'].diff(6)
+    df['month'] = df['Close_Price'].diff(30)
+    df.columns = pd.MultiIndex.from_product([[ticker], df.columns])  # Добавить тикер в качестве заголовка верхнего уровня
+    return df
+
+for ticker, df in filtered_dict.items():
+    new_dict[ticker] = process(df)
+    
+#объединяем таблицы
+combined_df = pd.concat(new_dict.values(), axis=1)
+
+#обрабатываем конечный датафрейм
+all_data = []
+
+#проходим по каждой компании
+for company in combined_df.columns.levels[0]:
+    #выбираем данные для текущей компании
+    company_df = combined_df[company].reset_index()
+    #добавляем столбец с названием компании
+    company_df['Company'] = company 
+    #добавляем данные в общий список
+    all_data.append(company_df)
+
+#объединяем данные из всех компаний в один DataFrame
+result_df = pd.concat(all_data, ignore_index=True)
+result_df['Date', 'Close_Price', ]
+result_df['Company'].unique()
+
+#присваиваем имена компаний
+company_names = {
+    'ABRD': 'Абрау-Дюрсо',
+    'AFKS': 'Система',
+    'AFLT': 'Аэрофлот',
+    'AGRO': 'Русагро',
+    'AKRN': 'Акрон',
+    'ALRS': 'АЛРОСА',
+    'AMEZ': 'Ашинский металлургический завод',
+    'APTK': 'Аптеки 36,6',
+    'AQUA': 'Ингра',
+    'ARSA': 'Арсагера',
+    'ASSB': 'Ассоциация',
+    'AVAN': 'Авангард',
+    'BANE': 'Банк Санкт-Петербург',
+    'BANEP': 'Банк Санкт-Петербург (прив)',
+    'BELU': 'Белуга Групп',
+    'BISVP': 'Банк ВТБ (прив)',
+    'BRZL': 'Бразилия (резервная)',
+    'BSPB': 'Банк Санкт-Петербург',
+    'BSPBP': 'Банк Санкт-Петербург (прив)',
+    'CBOM': 'Московская биржа',
+    'CHGZ': 'Челябинский цинковый завод',
+    'CHKZ': 'ЧКПЗ',
+    'CHMF': 'Северсталь',
+    'CHMK': 'Сегежа Групп',
+    'CIAN': 'Cian PLC',
+    'CNTL': 'Центральный телеграф',
+    'CNTLP': 'Центральный телеграф (прив)',
+    'DIOD': 'Диод',
+    'DVEC': 'ДВЭК',
+    'DZRD': 'ДЗРД',
+    'DZRDP': 'ДЗРД (прив)',
+    'EELT': 'Электроцинк',
+    'ENPG': 'ЭН+ ГРУП',
+    'ETLN': 'Эталон',
+    'FESH': 'Черкизово',
+    'FIVE': 'X5 Retail Group',
+    'FIXP': 'Fix Price Group',
+    'FLOT': 'Совкомфлот',
+    'GAZP': 'Газпром',
+    'GCHE': 'Globaltrans',
+    'GEMA': 'Группа ЛСР',
+    'GEMCP': 'Группа ЛСР (прив)',
+    'GLTR': 'Globaltrans',
+    'GMKN': 'Норникель',
+    'HHRU': 'HH&R',
+    'HIMCP': 'НЛМК (прив)',
+    'HYDR': 'РусГидро',
+    'IGST': 'Интер РАО',
+    'IGSTP': 'Интер РАО (прив)',
+    'INGR': 'En+ Group',
+    'IRAO': 'Интер РАО ЕЭС',
+    'IRKT': 'Иркут',
+    'JNOS': 'Новолипецкий металлургический комбинат',
+    'JNOSP': 'Новолипецкий металлургический комбинат (прив)',
+    'KAZT': 'КАЗТМ',
+    'KAZTP': 'КАЗТМ (прив)',
+    'KBSB': 'Кузбасская топливная компания',
+    'KCHE': 'КуйбышевАзот',
+    'KCHEP': 'КуйбышевАзот (прив)',
+    'KGKC': 'Калужская сбытовая компания',
+    'KGKCP': 'Калужская сбытовая компания (прив)',
+    'KLSB': 'Группа Позитив',
+    'KMAZ': 'КАМАЗ',
+    'KMEZ': 'КМЗ',
+    'KRKN': 'Лента',
+    'KRKNP': 'Лента (прив)',
+    'KRKOP': 'Лента (прив)',
+    'KROT': 'Красноярскэнергосбыт',
+    'KROTP': 'Красноярскэнергосбыт (прив)',
+    'KRSB': 'Аэрофлот',
+    'KRSBP': 'Аэрофлот (прив)',
+    'KUBE': 'Кубаньэнерго',
+    'KUZB': 'Кузбассэнерго',
+    'KZOS': 'Казахстан (резервная)',
+    'KZOSP': 'Казахстан (резервная)',
+    'LENT': 'Лента',
+    'LKOH': 'Лукойл',
+    'LNZL': 'Лензолото',
+    'LNZLP': 'Лензолото (прив)',
+    'LSNG': 'Ленэнерго',
+    'LSNGP': 'Ленэнерго (прив)',
+    'LSRG': 'Группа ЛСР',
+    'LVHK': 'М.видео',
+    'MAGE': 'Магнит',
+    'MAGEP': 'Магнит (прив)',
+    'MAGN': 'Магнитогорский металлургический комбинат',
+    'MDMG': 'ММК',
+    'MFGS': 'МТС',
+    'MFGSP': 'МТС (прив)',
+    'MGNT': 'Магнит',
+    'MGTS': 'МГТС',
+    'MGTSP': 'МГТС (прив)',
+    'MISB': 'Московский Индустриальный банк',
+    'MISBP': 'Московский Индустриальный банк (прив)',
+    'MOEX': 'Московская биржа',
+    'MRKC': 'МРК',
+    'MRKK': 'МРК',
+    'MRKP': 'МРК (прив)',
+    'MRKS': 'МРК',
+    'MRKU': 'МРК',
+    'MRKV': 'МРК',
+    'MRKY': 'МРК',
+    'MRKZ': 'МРК',
+    'MRSB': 'Мордовия (резервная)',
+    'MSNG': 'МТС',
+    'MSRS': 'Мосэнерго',
+    'MSTT': 'МТС',
+    'MTLR': 'Мечел',
+    'MTLRP': 'Мечел (прив)',
+    'MTSS': 'МТС',
+    'MVID': 'М.видео',
+    'NAUK': 'НОВАТЭК',
+    'NFAZ': 'Нижнекамскнефтехим (прив)',
+    'NKHP': 'НОВАТЭК',
+    'NKNC': 'НКНХ',
+    'NKNCP': 'НКНХ (прив)',
+    'NKSH': 'НКХП',
+    'NLMK': 'НЛМК',
+    'NMTP': 'Новороссийский морской торговый порт',
+    'NNSB': 'Нижнекамскшина',
+    'NNSBP': 'Нижнекамскшина (прив)',
+    'NSVZ': 'Новосибирск (резервная)',
+    'NVTK': 'НОВАТЭК',
+    'OGKB': 'Объединенная компания "Русал"',
+    'OKEY': 'ОКЕЙ',
+    'OMZZP': 'Омск (резервная)',
+    'OZON': 'Ozon',
+    'PHOR': 'ФосАгро',
+    'PIKK': 'ПИК',
+    'PLZL': 'Полюс',
+    'PMSB': 'Промсвязьбанк',
+    'PMSBP': 'Промсвязьбанк (прив)',
+    'POLY': 'Полиметалл',
+    'POSI': 'Позитив',
+    'QIWI': 'QIWI',
+    'RASP': 'Россети',
+    'RDRB': 'Россети Ленэнерго',
+    'RENI': 'Ренессанс Страхование',
+    'RGSS': 'Россельхозбанк',
+    'RKKE': 'Rostelecom',
+    'RNFT': 'Руснефть',
+    'ROSB': 'Россельхозбанк',
+    'ROSN': 'Роснефть',
+    'ROST': 'Ростелеком',
+    'RTKM': 'Ростелеком',
+    'RTKMP': 'Ростелеком (прив)',
+    'RTSB': 'Ростелеком',
+    'RTSBP': 'Ростелеком (прив)',
+    'RUAL': 'Русал',
+    'RUSI': 'Русал',
+    'RZSB': 'Россети Сибирь',
+    'SAGO': 'Сургутнефтегаз',
+    'SAGOP': 'Сургутнефтегаз (прив)',
+    'SARE': 'Сахалинэнерго',
+    'SAREP': 'Сахалинэнерго (прив)',
+    'SBER': 'Сбербанк',
+    'SBERP': 'Сбербанк (прив)',
+    'SELG': 'Селигдар',
+    'SFIN': 'Сафмар',
+    'SGZH': 'Сургутнефтегаз',
+    'SIBN': 'Газпром нефть',
+    'SLEN': 'Славнефть-Мегионнефтегаз',
+    'SMLT': 'Якутскэнерго',
+    'SNGS': 'Сургутнефтегаз',
+    'SNGSP': 'Сургутнефтегаз (прив)',
+    'SPBE': 'СПБ',
+    'STSB': 'Ставропольэнерго',
+    'STSBP': 'Ставропольэнерго (прив)',
+    'SVAV': 'Селигдар (прив)',
+    'SVET': 'Совет директоров',
+    'TASB': 'Транснефть',
+    'TASBP': 'Транснефть (прив)',
+    'TATN': 'Татнефть',
+    'TATNP': 'Татнефть (прив)',
+    'TCSG': 'Тинькофф',
+    'TGKA': 'ТГК А',
+    'TGKB': 'ТГК-1',
+    'TGKBP': 'ТГК-1 (прив)',
+    'TGKN': 'ТГК-1',
+    'TNSE': 'ТНС энерго',
+    'TORS': 'Торсин',
+    'TORSP': 'Торсин (прив)',
+    'TRMK': 'ТМК',
+    'TRNFP': 'Транснефть (прив)',
+    'TTLK': 'ТТК',
+    'TUZA': 'Тулачермет',
+    'UKUZ': 'Южуралникель',
+    'UNAC': 'Юнайтед Компани',
+    'UNKL': 'Уралкалий',
+    'UPRO': 'Уралкалий',
+    'URKZ': 'Уралкалий',
+    'USBN': 'Юнипро',
+    'UTAR': 'Уралкалий',
+    'VEON-RX': 'VEON',
+    'VGSB': 'ВСМПО-АВИСМА',
+    'VGSBP': 'ВСМПО-АВИСМА (прив)',
+    'VJGZ': 'Верхнесалдинское металлургическое производственное объединение',
+    'VJGZP': 'Верхнесалдинское металлургическое производственное объединение (прив)',
+    'VKCO': 'VK',
+    'VLHZ': 'ВЛХЗ',
+    'VRSB': 'Всероссийский банк развития регионов',
+    'VRSBP': 'Всероссийский банк развития регионов (прив)',
+    'VSMO': 'ВСМПО-АВИСМА',
+    'VSYD': 'ВСПМО-АВИСМА',
+    'VSYDP': 'ВСПМО-АВИСМА (прив)',
+    'VTBR': 'Банк ВТБ',
+    'WTCM': 'МТС',
+    'WTCMP': 'МТС (прив)',
+    'WUSH': 'ВУШ',
+    'YAKG': 'Якутгаз',
+    'YKEN': 'ЯТЭК',
+    'YKENP': 'ЯТЭК (прив)',
+    'YRSB': 'Якутия (резервная)',
+    'YRSBP': 'Якутия (резервная)',
+    'ZILL': 'ЗИЛ',
+    'ZVEZ': 'Московский эндокринный завод'
+}
+
+result_df['Company_Name'] = result_df['Company'].map(company_names)
+
+#"расплавляем" столбцы в 'Value' и 'Timedelta'
+value_cols = ['day', 'week', 'month']
+melted_df = pd.melt(result_df, 
+                    id_vars=['index', 'Date', 'Close_Price', 'Company', 'Company_Name'], 
+                    value_vars=value_cols, 
+                    var_name='Timedelta', 
+                    value_name='Value')
+
+#удаляем строки с NaN в 'Value'
+melted_df.dropna(subset=['Value'], inplace=True)
+
+#сбрасываем индекс и удаляем старый
+final_df = melted_df.reset_index(drop=True)
+
+#заменим для русскоязычного пользователя
+time_change = {'day': 'День', 'week': 'Неделя', 'month': 'Месяц'}
+final_df['Timedelta'] = final_df['Timedelta'].map(time_change)
+
+#создадим столбец для гистограммы
+df = final_df
+def assign_mean_rank(group):
+    """Присваивает среднее значение Value для каждого ранга."""
+    group['Rank'] = pd.qcut(group['Value'], 12, labels=False, duplicates='drop') + 1
+    
+    #вычисляем средние значения Value для каждого ранга
+    rank_means = group.groupby('Rank')['Value'].mean().round().astype(int)
+    
+    #создаем словарь для замены номеров рангов на средние значения
+    mapping = dict(zip(rank_means.index, rank_means.values))
+    
+    #заменяем номера рангов на средние значения
+    group['Mean Rank'] = group['Rank'].map(mapping)
+    
+    return group
+
+#группируем по Company_Name и Timedelta, применяем функцию
+df = df.groupby(['Company_Name', 'Timedelta'], group_keys=False).apply(assign_mean_rank)
+
+#сохраним результат
+df.to_excel(r'C:\Users\Maksim\Desktop\to_present.xlsx', index= False)
+
+
