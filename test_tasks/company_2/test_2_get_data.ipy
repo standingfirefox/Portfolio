@@ -315,7 +315,7 @@ final_df['Timedelta'] = final_df['Timedelta'].map(time_change)
 df = final_df
 def assign_mean_rank(group):
     """Присваивает среднее значение Value для каждого ранга."""
-    group['Rank'] = pd.qcut(group['Value'], 12, labels=False, duplicates='drop') + 1
+    group['Rank'] = pd.cut(group['Value'], 10, labels=False, duplicates='drop') + 1
     
     #вычисляем средние значения Value для каждого ранга
     rank_means = group.groupby('Rank')['Value'].mean().round().astype(int)
@@ -335,3 +335,5 @@ df = df.groupby(['Company_Name', 'Timedelta'], group_keys=False).apply(assign_me
 df.to_excel(r'C:\Users\Maksim\Desktop\to_present.xlsx', index= False)
 
 
+df[(df['Company'] == 'SBER')&(df['Timedelta'] == 'День')].nunique()
+df
